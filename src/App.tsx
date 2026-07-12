@@ -44,7 +44,7 @@ export default function App() {
             </div>
             <div>
               <p className="text-[#4A3F35] leading-relaxed">
-                此网页版为 <strong>Lexnote 参加 TRAE 比赛</strong>的功能展示 Demo。
+                此网页<strong>只用于演示Demo</strong>。
               </p>
             </div>
           </div>
