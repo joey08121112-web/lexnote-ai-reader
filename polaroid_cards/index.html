@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拍立得照片卡片预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f5f0eb;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 300;
+    color: #5a4a3a;
+    margin-bottom: 40px;
+    letter-spacing: 4px;
+  }
+  .grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 30px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .card {
+    filter: drop-shadow(2px 4px 8px rgba(0,0,0,0.15));
+    transition: transform 0.3s ease;
+    cursor: pointer;
+  }
+  .card:hover {
+    transform: scale(1.03) rotate(0deg) !important;
+    z-index: 10;
+  }
+  .card img {
+    display: block;
+    max-width: 300px;
+    width: 100%;
+    height: auto;
+  }
+  .info {
+    text-align: center;
+    color: #8a7a6a;
+    font-size: 13px;
+    margin-top: 30px;
+  }
+</style>
+</head>
+<body>
+<h1>POLAROID COLLECTION</h1>
+<div class="grid" id="gallery"></div>
+<div class="info">共 53 张拍立得风格照片卡片 | 右键可保存原尺寸图片</div>
+<script>
+const files = [
+  "polaroid_34656.png","polaroid_34639.png","polaroid_34647.png","polaroid_34663.png",
+  "polaroid_34661.png","polaroid_34649.png","polaroid_34646.png","polaroid_34653.png",
+  "polaroid_34658.png","polaroid_34652.png","polaroid_34622.png","polaroid_34636.png",
+  "polaroid_34631.png","polaroid_34654.png","polaroid_34644.png","polaroid_34623.png",
+  "polaroid_34651.png","polaroid_34627.png","polaroid_34603.png","polaroid_34629.png",
+  "polaroid_livephoto.png","polaroid_34630.png","polaroid_34641.png","polaroid_34616.png",
+  "polaroid_34633.png","polaroid_34624.png","polaroid_34625.png","polaroid_34634.png",
+  "polaroid_34628.png","polaroid_34660.png","polaroid_34621.png",
+  "polaroid_0ba6e6d1bd019f87bf8a6a7750a29073.png","polaroid_34602.png",
+  "polaroid_34613.png","polaroid_34642.png","polaroid_34612.png","polaroid_34619.png",
+  "polaroid_34640.png","polaroid_34648.png","polaroid_34632.png","polaroid_34655.png",
+  "polaroid_34606.png","polaroid_34608.png","polaroid_34617.png","polaroid_34662.png",
+  "polaroid_34638.png","polaroid_34650.png","polaroid_34607.png","polaroid_34645.png",
+  "polaroid_30e756d4e02c633fc78a927ef07e53bd.png","polaroid_34657.png",
+  "polaroid_34637.png","polaroid_34643.png"
+];
+
+const gallery = document.getElementById('gallery');
+files.forEach((f, i) => {
+  const rotations = [-2, 1.5, -1, 2, -0.5, 1, -1.5, 0.8, -2.5, 1.2];
+  const rot = rotations[i % rotations.length];
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.style.transform = `rotate(${rot}deg)`;
+  const img = document.createElement('img');
+  img.src = f;
+  img.alt = f;
+  card.appendChild(img);
+  gallery.appendChild(card);
+});
+</script>
+</body>
+</html>
