@@ -5,12 +5,9 @@ import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
 
 // https://vite.dev/config/
 export default defineConfig({
-  build: {
-    sourcemap: 'hidden',
-  },
   plugins: [
     react({
-      babel: {
+      babel: process.env.NODE_ENV === 'production' ? undefined : {
         plugins: [
           'react-dev-locator',
         ],
