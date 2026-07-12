@@ -37,6 +37,9 @@ build.sh
 .env.local
 .env.*.local
 
+# Vercel
+.vercel
+
 # 其他临时目录
 .trae-html-share-packages/
 *.zip
