@@ -5,10 +5,11 @@ services:
     plan: free
     buildCommand: npm install && npm run build
     startCommand: npm start
-    nodeVersion: 20
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 20
       - key: NO_PROXY
         value: '*'
       - key: http_proxy
