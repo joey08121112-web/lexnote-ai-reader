@@ -1,3 +1,17 @@
+// ==== 全局错误捕获（确保任何启动错误都能输出到日志）====
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION:', reason);
+  process.exit(1);
+});
+
+console.log('Starting Lexnote server...');
+console.log('Node version:', process.version);
+console.log('Working directory:', process.cwd());
+
 // ==== 第一步：清除所有代理环境变量（必须在任何 require 之前！）====
 const PROXY_KEYS = ['http_proxy','https_proxy','HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','all_proxy','no_proxy','NO_PROXY'];
 for (const k of PROXY_KEYS) { delete process.env[k]; }
@@ -523,6 +537,7 @@ async function callQwenVL(image, prompt, apiKey, history) {
 
 // 静态文件服务：提供前端 dist 目录（生产部署用）
 const distPath = path.join(__dirname, '..', 'dist');
+console.log('Dist path:', distPath, 'exists:', fs.existsSync(distPath));
 if (fs.existsSync(distPath)) {
   // 确保 .mjs 文件以正确的 MIME 类型提供（ES Module 需要）
   express.static.mime.define({'application/javascript': ['mjs']});

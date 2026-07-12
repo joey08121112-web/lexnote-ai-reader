@@ -3,10 +3,10 @@ services:
     name: lexnote
     env: node
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: node server/index.cjs
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_OPTIONS
-        value: "--max-old-space-size=1024"
+        value: "--max-old-space-size=2048"
