@@ -4,21 +4,9 @@ services:
     env: node
     plan: free
     buildCommand: npm install && npm run build
-    startCommand: npm start
+    startCommand: node server/index.cjs
     envVars:
       - key: NODE_ENV
         value: production
-      - key: NODE_VERSION
-        value: 20
-      - key: NO_PROXY
-        value: '*'
-      - key: http_proxy
-        value: ''
-      - key: https_proxy
-        value: ''
-      - key: HTTP_PROXY
-        value: ''
-      - key: HTTPS_PROXY
-        value: ''
-      - key: ALL_PROXY
-        value: ''
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=512
