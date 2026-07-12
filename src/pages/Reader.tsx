@@ -28,6 +28,7 @@ import ePub from 'epubjs';
 import * as pdfjsLib from 'pdfjs-dist';
 import type { VocabularyWord } from '@/types/vocabulary';
 import { renderDomTextHighlights, buildDomAnchorFromRange, createTempDomHighlight } from '@/lib/domTextHighlightRenderer';
+import html2canvas from 'html2canvas';
 
 // tldraw 笔记组件按需加载（包体积 ~1.5MB）
 const TldrawEditor = lazy(() => import('@/components/TldrawEditor'));
@@ -1061,18 +1062,26 @@ export default function Reader() {
     setRectSelect(null);
   }, []);
 
-  // ==== 区域截图：截取指定矩形区域 ====
-  const captureRegion = useCallback((rect: { x: number; y: number; w: number; h: number }): string | null => {
+  // ==== 区域截图：截取指定矩形区域（支持PDF Canvas和DOM两种模式）====
+  const captureRegion = useCallback(async (rect: { x: number; y: number; w: number; h: number }): Promise<string | null> => {
     const container = containerRef.current;
     if (!container) { console.warn('[AI] captureRegion: container not found'); return null; }
 
-    const canvases = container.querySelectorAll('canvas') as NodeListOf<HTMLCanvasElement>;
-    if (canvases.length > 0) {
+    const tldrawOverlay = container.querySelector('.lexnote-tldraw-overlay') as HTMLElement | null;
+    const aiSelectOverlay = container.querySelector('.lexnote-ai-select-rect') as HTMLElement | null;
+
+    const allCanvases = container.querySelectorAll('canvas') as NodeListOf<HTMLCanvasElement>;
+    const pdfCanvases = Array.from(allCanvases).filter(canvas => {
+      if (tldrawOverlay && tldrawOverlay.contains(canvas)) return false;
+      return canvas.width > 10 && canvas.height > 10;
+    });
+
+    if (pdfCanvases.length > 0) {
       let bestCanvas: HTMLCanvasElement | null = null;
       let bestArea = 0;
       let bestCrop = { fx: 0, fy: 0, fw: 0, fh: 0 };
 
-      for (const canvas of Array.from(canvases)) {
+      for (const canvas of pdfCanvases) {
         const canvasRect = canvas.getBoundingClientRect();
         const ix = Math.max(rect.x, canvasRect.left);
         const iy = Math.max(rect.y, canvasRect.top);
@@ -1099,7 +1108,6 @@ export default function Reader() {
 
       if (bestCanvas && bestCrop.fw > 0 && bestCrop.fh > 0) {
         try {
-          // 压缩截图：限制最长边不超过 1280px，使用 JPEG 减少体积和 token 消耗
           const MAX_EDGE = 1280;
           let outW = bestCrop.fw;
           let outH = bestCrop.fh;
@@ -1113,37 +1121,84 @@ export default function Reader() {
           tempCanvas.height = outH;
           const ctx = tempCanvas.getContext('2d');
           if (ctx) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, outW, outH);
             ctx.drawImage(bestCanvas, bestCrop.fx, bestCrop.fy, bestCrop.fw, bestCrop.fh, 0, 0, outW, outH);
             const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.82);
-            console.log('[AI] captureRegion: captured', { origW: bestCrop.fw, origH: bestCrop.fh, outW, outH, size: Math.round(dataUrl.length / 1024) + 'KB' });
+            console.log('[AI] captureRegion: captured PDF canvas', { origW: bestCrop.fw, origH: bestCrop.fh, outW, outH, size: Math.round(dataUrl.length / 1024) + 'KB' });
             return dataUrl;
           }
         } catch (e) {
-          console.warn('[AI] captureRegion: canvas crop failed', e);
+          console.warn('[AI] captureRegion: PDF canvas crop failed', e);
         }
-      }
-
-      const firstCanvas = canvases[0];
-      try {
-        const fullShot = firstCanvas.toDataURL('image/png');
-        console.warn('[AI] captureRegion: no intersecting canvas, falling back to first canvas');
-        return fullShot;
-      } catch (e) {
-        console.warn('[AI] captureRegion: fallback also failed', e);
-        return null;
       }
     }
 
-    console.log('[AI] captureRegion: no canvas found (EPUB/TXT mode), will use text fallback');
+    const contentEl = container.querySelector(
+      'article.prose, .epub-content, .text-content, [class*="viewer"]'
+    ) as HTMLElement | null || document.body;
+
+    try {
+      const overlaysToHide: HTMLElement[] = [];
+      if (tldrawOverlay) { overlaysToHide.push(tldrawOverlay); tldrawOverlay.style.visibility = 'hidden'; }
+      if (aiSelectOverlay) { overlaysToHide.push(aiSelectOverlay); aiSelectOverlay.style.visibility = 'hidden'; }
+
+      const dpr = window.devicePixelRatio || 1;
+      const captureX = Math.max(0, Math.floor(rect.x));
+      const captureY = Math.max(0, Math.floor(rect.y));
+      const captureW = Math.floor(rect.w);
+      const captureH = Math.floor(rect.h);
+
+      const fullCanvas = await html2canvas(contentEl, {
+        backgroundColor: '#FFFFFF',
+        scale: dpr,
+        useCORS: true,
+        logging: false,
+        x: captureX - contentEl.getBoundingClientRect().left,
+        y: captureY - contentEl.getBoundingClientRect().top,
+        width: captureW,
+        height: captureH,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+      });
+
+      for (const el of overlaysToHide) { el.style.visibility = ''; }
+
+      const MAX_EDGE = 1280;
+      let outW = fullCanvas.width;
+      let outH = fullCanvas.height;
+      if (outW > MAX_EDGE || outH > MAX_EDGE) {
+        const scale = Math.min(MAX_EDGE / outW, MAX_EDGE / outH);
+        outW = Math.round(outW * scale);
+        outH = Math.round(outH * scale);
+      }
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = outW;
+      tempCanvas.height = outH;
+      const ctx = tempCanvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, outW, outH);
+        ctx.drawImage(fullCanvas, 0, 0, fullCanvas.width, fullCanvas.height, 0, 0, outW, outH);
+        const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.82);
+        console.log('[AI] captureRegion: captured DOM via html2canvas', { captureX, captureY, captureW, captureH, outW, outH, size: Math.round(dataUrl.length / 1024) + 'KB' });
+        return dataUrl;
+      }
+    } catch (e) {
+      console.warn('[AI] captureRegion: DOM capture failed', e);
+      if (tldrawOverlay) tldrawOverlay.style.visibility = '';
+      if (aiSelectOverlay) aiSelectOverlay.style.visibility = '';
+    }
+
+    console.log('[AI] captureRegion: no capture target found');
     return null;
   }, []);
 
   // ==== 打开 AI 对话弹窗（不自动发送，等待用户输入问题）====
-  const openAIChatWithRegion = useCallback((rect: { x: number; y: number; w: number; h: number }) => {
-    const image = captureRegion(rect);
-    aiSelectedImageRef.current = image;
-    console.log('[AI] openAIChatWithRegion:', { rect, hasImage: !!image, imageSize: image ? Math.round(image.length / 1024) + 'KB' : 'none' });
-
+  const openAIChatWithRegion = useCallback(async (rect: { x: number; y: number; w: number; h: number }) => {
     const POPUP_W = 380;
     let popupX: number;
     if (rect.x + rect.w + POPUP_W + 16 <= window.innerWidth) {
@@ -1162,8 +1217,18 @@ export default function Reader() {
     setSolverMessages([]);
     setSolverLoading(false);
     setSolverFollowUp('');
-    setPendingChatImage(image);
+    setPendingChatImage(null);
     aiApiHistoryRef.current = [];
+    aiSelectedImageRef.current = null;
+
+    try {
+      const image = await captureRegion(rect);
+      aiSelectedImageRef.current = image;
+      setPendingChatImage(image);
+      console.log('[AI] openAIChatWithRegion:', { rect, hasImage: !!image, imageSize: image ? Math.round(image.length / 1024) + 'KB' : 'none' });
+    } catch (e) {
+      console.warn('[AI] openAIChatWithRegion: capture failed', e);
+    }
   }, [captureRegion]);
 
   // ==== AI 对话弹窗：发送消息核心逻辑 ====
@@ -1439,19 +1504,21 @@ export default function Reader() {
   }, []);
 
   // ==== AI 解题：截取当前页面为图片 ====
-  const captureCurrentPage = useCallback((): string | null => {
+  const captureCurrentPage = useCallback(async (): Promise<string | null> => {
     if (!containerRef.current) return null;
 
-    // 优先找 PDF 的 canvas
-    const pdfCanvas = containerRef.current.querySelector('canvas');
-    if (pdfCanvas) {
-      return pdfCanvas.toDataURL('image/png');
-    }
+    const container = containerRef.current;
+    const containerRect = container.getBoundingClientRect();
 
-    // 如果是文本内容，用 html2canvas 思路：创建一个临时 canvas 绘制文本
-    // 简化方案：直接返回 null，用文本模式
-    return null;
-  }, []);
+    const viewRect = {
+      x: Math.max(0, containerRect.left),
+      y: Math.max(0, containerRect.top),
+      w: Math.min(window.innerWidth, containerRect.width),
+      h: Math.min(window.innerHeight, containerRect.height),
+    };
+
+    return captureRegion(viewRect);
+  }, [captureRegion]);
 
   // ==== AI 框选解题：笔记模式 tldraw 框选 → 截图选区 → 浮动弹窗对话 ====
   const handleTldrawAISelect = useCallback(async (rect: { x: number; y: number; w: number; h: number }) => {
@@ -1482,17 +1549,24 @@ export default function Reader() {
     }
     const popupY = Math.max(70, Math.min(screenRect.y - 10, window.innerHeight - 400));
 
-    const pageImage = captureRegion(screenRect);
-    aiSelectedImageRef.current = pageImage;
-
     setChatPopup({ visible: true, x: popupX, y: popupY });
     setSolverError('');
     setRectSelect(null);
     setSolverMessages([]);
     setSolverLoading(false);
     setSolverFollowUp('');
-    setPendingChatImage(pageImage);
+    setPendingChatImage(null);
     aiApiHistoryRef.current = [];
+    aiSelectedImageRef.current = null;
+
+    try {
+      const pageImage = await captureRegion(screenRect);
+      aiSelectedImageRef.current = pageImage;
+      setPendingChatImage(pageImage);
+      console.log('[AI] handleTldrawAISelect: captured', { hasImage: !!pageImage, imageSize: pageImage ? Math.round(pageImage.length / 1024) + 'KB' : 'none' });
+    } catch (e) {
+      console.warn('[AI] handleTldrawAISelect: capture failed', e);
+    }
   }, [captureRegion, pageLayout]);
 
   // ==== 提取全书文本（PDF/EPUB/TXT 三种格式） ====
@@ -1597,7 +1671,7 @@ export default function Reader() {
     try {
       let result: string;
 
-      const pageImage = captureCurrentPage();
+      const pageImage = await captureCurrentPage();
 
       if (pageImage) {
         result = await solveFromImage(pageImage, promptText, prevMessages);
@@ -1631,7 +1705,7 @@ export default function Reader() {
 
     try {
       let result: string;
-      const pageImage = captureCurrentPage();
+      const pageImage = await captureCurrentPage();
 
       if (pageImage) {
         result = await solveFromImage(pageImage, solverFollowUp, prevMessages);
@@ -2077,7 +2151,7 @@ export default function Reader() {
               }
             >
               <div
-                className="absolute z-20"
+                className="absolute z-20 lexnote-tldraw-overlay"
                 style={{
                   left: 0,
                   top: pageLayout?.top ?? 0,
